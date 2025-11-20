@@ -9,14 +9,15 @@ export const runtime = "nodejs"
 // R2 클라이언트 생성
 function createR2Client(config) {
   return new S3Client({
-    region: "auto",
-    endpoint: config.r2Domain,
+    region: "auto",   // R2는 region 의미 없음 → 아무 값이나 가능
+    endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
     credentials: {
       accessKeyId: config.accessKey,
       secretAccessKey: config.secretKey,
     },
   })
 }
+
 
 export default defineEventHandler(async (event) => {
   const { url: instaUrl } = await readBody(event)
