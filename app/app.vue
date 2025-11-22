@@ -7,6 +7,5 @@
 <style>
 html, body, #__nuxt, #__layout {
   height: 100%;
-  overflow: hidden;
 }
 </style>

@@ -3,13 +3,15 @@ import * as cheerio from "cheerio"
 import { v4 as uuidv4 } from "uuid"
 import nodeFetch from "node-fetch"
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
+import fs from "fs";
+import path from "path";
 
 export const runtime = "nodejs"
 
 // R2 클라이언트 생성
 function createR2Client(config) {
   return new S3Client({
-    region: "auto",   // R2는 region 의미 없음 → 아무 값이나 가능
+    region: "auto",   // R2는 region 의미 없음 → 아무 값이나 가능wwwwwwwwwwwwww
     endpoint: `https://${config.accountId}.r2.cloudflarestorage.com`,
     credentials: {
       accessKeyId: config.accessKey,
@@ -48,47 +50,18 @@ export default defineEventHandler(async (event) => {
     })
 
 
+    const html = await res.text();
 
-    const html = await res.text()
+    let { title, author, tags } = parseFromHtml(html);
+
+    console.log("title:", title);
+    console.log("author:", author);
+    console.log("tags:", tags);    
+
+    
 
 
     const $ = cheerio.load(html)
-
-    // 캡션 span 찾기
-    const captionSpan = $('span[class*="_ap3a"]').first()
-
-    let captionText = ""
-    let author = ""
-
-    if (captionSpan.length > 0) {
-      // 1) <br> 자동 개행 변환
-      captionSpan.find("br").replaceWith("\n")
-
-      // 2) span 전체 텍스트 (해시태그 포함)
-      author = captionSpan.text().trim()
-
-    }
-
-    // 제목 + 해시태그가 들어있는 span
-    const span = $('span._ap3a').first()
-
-    let rawText = span.clone().children('a').remove().end().text().trim()
-    // "사실은 말이야 나도 로그를 본적이 없어"
-
-    const title = $('h1._ap3a').first().text().trim()
-
-
-    // 해시태그 수집
-    const hashtags = span.find('a[href*="/explore/tags/"]')
-      .map((i, el) => $(el).text().trim())
-      .get()
-    // ["#개발", "#개발자", "#터틀넥", "#체인소맨"]
-
-
-    console.log("author:", author)
-    console.log("해시태그:", hashtags)
-    console.log("title:", title)
-    console.log("rawText:", rawText)
 
 
     // OG 이미지
@@ -126,30 +99,34 @@ export default defineEventHandler(async (event) => {
     // ---------------------------------------------------------
     // 3) HTML 생성 (OG 태그 강화)
     // ---------------------------------------------------------
+    const limitedTags = tags && tags.length > 0 ? tags.slice(0, 3).join(' ') : '';
+    const descriptionText = `${author || "인스타그램 작성자"} ${limitedTags}`;
+
     const previewHtml = `
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="utf-8" />
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+      <meta charset="utf-8" />
 
-    <!-- OG 태그 (카톡 미리보기용) -->
-    <meta property="og:title" content="${title || "Instagram Title" }"  />
-    <meta property="og:description" content="${author || "Instagram Post"}" />
-    <meta property="og:image" content="${imageUrl}" />
+      <!-- OG 태그 (카톡 미리보기용) -->
+      <meta property="og:title" content="${title || "인스타그램 제목"}" />
+      <meta property="og:description" content="${descriptionText}" />
+      <meta property="og:image" content="${imageUrl}" />
 
-    <meta http-equiv="refresh" content="0; url=${instaUrl}" />
+      <meta http-equiv="refresh" content="0; url=${instaUrl}" />
 
-    <style>
+      <style>
         body { font-family: sans-serif; padding:50px; text-align:center; }
         .info { color:#555; font-size:15px; }
-    </style>
-</head>
-<body>
-    <p class="info">${author}님의 Instagram 게시물로 이동 중...</p>
-    <script>location.href="${instaUrl}"</script>
-</body>
-</html>
-`
+      </style>
+    </head>
+    <body>
+      <p class="info">${author}님의 Instagram 게시물로 이동 중...</p>
+      <script>location.href="${instaUrl}"</script>
+    </body>
+    </html>
+    `;
+
 
     // R2 저장
     const htmlKey = `htmls/${name}.html`
@@ -181,3 +158,158 @@ export default defineEventHandler(async (event) => {
     return { error: "이미지 처리 중 오류 발생" }
   }
 })
+
+
+function decodeHtmlEntities(str = "") {
+  if (!str) return str;
+
+  return str
+    // hex: &#xC548;
+    .replace(/&#x([0-9A-Fa-f]+);/g, (_, hex) =>
+      String.fromCharCode(parseInt(hex, 16))
+    )
+    // dec: &#45208;
+    .replace(/&#([0-9]+);/g, (_, dec) =>
+      String.fromCharCode(parseInt(dec, 10))
+    )
+    // 기본 HTML 엔티티
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&#39;/g, "'");
+}
+
+
+/**
+ * 인스타그램 HTML에서
+ * - 제목: "컴공이 잠을 못 잤을 때"
+ * - 작성자: ssongsogong
+ * - 태그: #대학생 #동아대 ...
+ * 를 추출해서 반환
+ */
+function parseFromHtml(html) {
+  let title = "";
+  let author = "";
+  let tags = [];
+
+  // -----------------------------
+  // 1) 작성자(author) 추출
+  //    <meta name="twitter:title" content="소공소공 (@ssongsogong) • Instagram 릴스">
+  // -----------------------------
+  const twitterTitleMatch = html.match(
+    /<meta[^>]+name=["']twitter:title["'][^>]+content=["']([^"']+)["']/i
+  );
+
+  if (twitterTitleMatch) {
+    const twitterTitle = decodeHtmlEntities(twitterTitleMatch[1]);
+    // 예: "소공소공 (@ssongsogong) • Instagram 릴스"
+    const atMatch = twitterTitle.match(/@([0-9A-Za-z_.]+)/);
+    if (atMatch) {
+      author = atMatch[1]; // ssongsogong
+    }
+  }
+
+  // -----------------------------
+  // 2) 설명(캡션) 추출
+  //    <meta name="description" content="837 likes, ... &quot;컴공이 잠을 못 잤을 때 ... #태그들&quot;. ">
+  // -----------------------------
+  let description = "";
+
+  // 우선 name="description" 시도
+  const descMatch = html.match(
+    /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i
+  );
+
+  if (descMatch) {
+    description = decodeHtmlEntities(descMatch[1]);
+  } else {
+    // 혹시 없으면 og:description도 시도
+    const ogDescMatch = html.match(
+      /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i
+    );
+    if (ogDescMatch) {
+      description = decodeHtmlEntities(ogDescMatch[1]);
+    }
+  }
+
+  // -----------------------------
+  // 3) description에서 "캡션 부분"만 추출
+  //    837 likes, ... : "컴공이 잠을 못 잤을 때
+  //
+  //    #대학생 #동아대 ..."
+  // -----------------------------
+  if (description) {
+    // 큰따옴표 안쪽 내용만 가져오기
+    const quoteMatch = description.match(/"([^"]+)"/);
+    let caption = "";
+
+    if (quoteMatch) {
+      caption = quoteMatch[1]; // 컴공이 잠을 못 잤을 때 \n\n#대학생 ...
+    } else {
+      // 혹시 따옴표가 없으면 전체를 캡션으로 사용
+      caption = description;
+    }
+
+    // 줄 기준으로 쪼개서, 첫 줄(또는 첫 non-empty 줄)을 제목으로 사용
+    const lines = caption.split(/\r?\n/).map((l) => l.trim());
+    const nonEmptyLines = lines.filter((l) => l.length > 0);
+
+    if (nonEmptyLines.length > 0) {
+      title = nonEmptyLines[0]; // "컴공이 잠을 못 잤을 때"
+    }
+
+    // -----------------------------
+    // 4) 해시태그 추출: #로 시작하는 토큰들
+    // -----------------------------
+    tags = extractTags(html, caption);
+  }
+
+  return { title, author, tags };
+}
+
+function extractTags(html, caption) {
+  caption = caption ?? "";
+
+  // 1) caption에서 태그 추출 시도
+  let tags = caption.match(/#[^\s#]+/g);
+
+  if (!tags || tags.length === 0) {
+    // 2) caption 실패 → og:title 에서 재시도
+    const ogTitleMatch = html.match(
+      /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i
+    );
+
+    if (ogTitleMatch) {
+      const ogTitle = decodeHtmlEntities(ogTitleMatch[1]);
+      const ogTags = ogTitle.match(/#[^\s#]+/g);
+
+      if (ogTags && ogTags.length > 0) tags = ogTags;
+    }
+  }
+
+  // 3) 최종 판정
+  if (!tags || tags.length === 0) {
+    return ["#태그가없어요!"];
+  }
+
+  // 4) 태그가 있으면 앞 3개만 반환
+  return tags.slice(0, 3);
+}
+
+
+function saveData(domHtml) {
+  try {
+    const filePath = "C:\\Users\\nayou\\OneDrive\\Desktop\\Project\\url-thumbnail-spo\\my-nuxt-app\\public\\태그있는_이미지.html";
+
+    fs.writeFileSync(filePath, domHtml, "utf8");
+
+    console.log("✔ 저장 완료:", filePath);
+  } catch (err) {
+    console.error("❌ 저장 중 오류 발생:", err);
+  }
+}
+
+
+
+

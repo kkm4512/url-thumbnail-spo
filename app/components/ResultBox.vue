@@ -1,6 +1,5 @@
 <template>
   <div
-    v-if="url"
     class="w-full max-w-2xl bg-white p-6 rounded-2xl shadow-lg border
            transition-all duration-300"
   >
