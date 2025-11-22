@@ -28,10 +28,12 @@
 <script setup>
 import { ref } from "vue"
 
+// input & error
 const inputUrl = ref("")
 const errorMsg = ref("")
 
-const emit = defineEmits(["converted"])
+// 부모에게 전달할 이벤트
+const emit = defineEmits(["converted", "loading"])
 
 const convertUrl = async () => {
   if (!inputUrl.value) {
@@ -41,6 +43,9 @@ const convertUrl = async () => {
 
   errorMsg.value = ""
 
+  // 🔥 로딩 시작
+  emit("loading", true)
+
   try {
     const res = await $fetch("/api/convert", {
       method: "POST",
@@ -49,9 +54,11 @@ const convertUrl = async () => {
 
     if (res.error) {
       errorMsg.value = res.error
+      emit("loading", false) // ❗ 오류 발생해도 로딩 종료
       return
     }
 
+    // 성공 → 부모에게 데이터 전달
     emit("converted", {
       previewUrl: res.previewUrl,
       thumbnail: res.thumbnail
@@ -59,6 +66,9 @@ const convertUrl = async () => {
   } catch (e) {
     console.error(e)
     errorMsg.value = "처리 중 오류 발생"
+  } finally {
+    // 🔥 무조건 로딩 종료
+    emit("loading", false)
   }
 }
 </script>

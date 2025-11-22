@@ -1,6 +1,26 @@
 <template>
   <div>
 
+    <!-- 🔥 로딩 오버레이 -->
+    <div
+      v-if="loading"
+      class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 
+             flex items-center justify-center"
+    >
+      <div class="flex flex-col items-center">
+        <!-- 스피너 -->
+        <div
+          class="w-14 h-14 md:w-20 md:h-20 border-4 border-white border-t-transparent
+                 rounded-full animate-spin"
+        ></div>
+
+        <!-- 로딩 메시지 -->
+        <p class="text-white text-lg md:text-2xl mt-6">
+          생성 중입니다...
+        </p>
+      </div>
+    </div>
+
     <!-- 헤더 -->
     <header
       class="w-full bg-blue-600 text-white py-10 shadow-xl flex flex-col items-center justify-center"
@@ -16,10 +36,9 @@
     <!-- 섹션 1 : 이미지 비교 -->
     <section class="min-h-[45vh] bg-white flex justify-center py-12">
       <div
-        class="flex flex-col md:flex-row justify-center items-center md:items-start 
+        class="flex flex-col md:flex-row justify-center items-center md:items-start
                w-full max-w-6xl px-6 md:px-10 gap-16 md:gap-x-40"
       >
-
         <!-- img1 -->
         <div class="flex flex-col items-center md:items-start text-center md:text-left">
           <img
@@ -41,7 +60,6 @@
             아 ㅋㅋㅋㅋ 개쌉궁금
           </p>
         </div>
-
       </div>
     </section>
 
@@ -52,7 +70,11 @@
                justify-center w-full max-w-6xl px-6"
       >
         <div class="-mt-4 md:mt-0 w-full md:w-auto">
-          <UrlConverter @converted="onConverted" />
+          <!-- loading 이벤트 수신 추가됨 -->
+          <UrlConverter 
+            @converted="onConverted"
+            @loading="loading = $event"
+          />
         </div>
 
         <div class="w-full md:w-auto">
@@ -69,11 +91,20 @@ import { ref } from "vue"
 import UrlConverter from "~/components/UrlConverter.vue"
 import ResultBox from "~/components/ResultBox.vue"
 
+const loading = ref(false)
+
 const outputUrl = ref("")
 const thumbnailUrl = ref("")
 
 const onConverted = (data) => {
-  outputUrl.value = data.previewUrl
-  thumbnailUrl.value = data.thumbnail
+  loading.value = false // 응답 도착 → 로딩 종료
+
+  outputUrl.value = ""
+  thumbnailUrl.value = ""
+
+  setTimeout(() => {
+    outputUrl.value = data.previewUrl
+    thumbnailUrl.value = data.thumbnail
+  }, 10)
 }
 </script>
