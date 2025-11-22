@@ -5,7 +5,8 @@
   >
     <p class="text-lg font-semibold text-gray-800 mb-3">생성된 URL</p>
 
-    <div class="flex gap-3">
+    <!-- 🔥 버튼 정렬 깨짐 해결: items-center 추가 -->
+    <div class="flex items-center gap-3">
       <input
         :value="url"
         readonly
@@ -45,10 +46,8 @@ const showToast = ref(false)
 const copy = async () => {
   await navigator.clipboard.writeText(props.url)
 
-  // 토스트 활성화
   showToast.value = true
 
-  // 1초 후 자동 삭제
   setTimeout(() => {
     showToast.value = false
   }, 1000)
@@ -56,11 +55,11 @@ const copy = async () => {
 </script>
 
 <style>
-/* 🔥 간단한 fade 애니메이션 */
+/* 🔥 fade 애니메이션 */
 @keyframes fadeInOut {
-  0% { opacity: 0; transform: translate(-50%, 10px); }
-  10% { opacity: 1; transform: translate(-50%, 0); }
-  90% { opacity: 1; transform: translate(-50%, 0); }
+  0%   { opacity: 0; transform: translate(-50%, 10px); }
+  10%  { opacity: 1; transform: translate(-50%, 0); }
+  90%  { opacity: 1; transform: translate(-50%, 0); }
   100% { opacity: 0; transform: translate(-50%, 10px); }
 }
 
