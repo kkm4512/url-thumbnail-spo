@@ -1,0 +1,8 @@
+CREATE TABLE instagram_thumbnail (
+    instagram_url VARCHAR(512) PRIMARY KEY,         -- 원본 인스타그램 URL (PK)
+    title VARCHAR(255) CHARACTER SET utf8mb4,       -- 제목 (이모지 포함 가능)
+    author VARCHAR(100) CHARACTER SET utf8mb4,      -- 작성자 이름
+    tags VARCHAR(1000) CHARACTER SET utf8mb4,       -- 태그 문자열 (#학교 #축구 ...)
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,  -- 생성일
+    output_url VARCHAR(512)                         -- 변환 후 사용자에게 반환된 URL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

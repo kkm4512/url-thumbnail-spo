@@ -4,9 +4,18 @@ import { v4 as uuidv4 } from "uuid"
 import nodeFetch from "node-fetch"
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
 import fs from "fs";
-import path from "path";
+import mysql from "mysql2/promise";
 
 export const runtime = "nodejs"
+
+const pool = mysql.createPool({
+  host: "localhost",
+  port: 3306,
+  user: "root",
+  password: "1234",
+  database: "instagram",
+  charset: "utf8mb4",
+});
 
 // R2 클라이언트 생성
 function createR2Client(config) {
@@ -27,6 +36,13 @@ export default defineEventHandler(async (event) => {
 
   if (!instaUrl || !instaUrl.includes("instagram.com")) {
     return { error: "올바른 Instagram URL을 입력해주세요." }
+  }
+
+  let previewUrl = await getOutputUrlIfExists(instaUrl);
+  if (previewUrl) {
+        return {
+      previewUrl
+    }
   }
 
   try {
@@ -52,14 +68,7 @@ export default defineEventHandler(async (event) => {
 
     const html = await res.text();
 
-    let { title, author, tags } = parseFromHtml(html);
-
-    console.log("title:", title);
-    console.log("author:", author);
-    console.log("tags:", tags);    
-
-    
-
+    let { title, author, tags } = parseFromHtml(html);   
 
     const $ = cheerio.load(html)
 
@@ -139,18 +148,15 @@ export default defineEventHandler(async (event) => {
       })
     )
 
-    const previewUrl = `https://pub-335f8afbae124f10a1afd0acc4e424b8.r2.dev/${htmlKey}`
+    previewUrl = `https://pub-335f8afbae124f10a1afd0acc4e424b8.r2.dev/${htmlKey}`
+
+    insertInstagramData(instaUrl,title,author,tags.join(','),'',previewUrl);
 
     // ---------------------------------------------------------
     // 4) 결과 반환
     // ---------------------------------------------------------
     return {
-      success: true,
-      previewUrl,
-      thumbnail: imageUrl,
-      title,
-      author,      
-      originalUrl: instaUrl
+      previewUrl
     }
 
   } catch (err) {
@@ -164,13 +170,13 @@ function decodeHtmlEntities(str = "") {
   if (!str) return str;
 
   return str
-    // hex: &#xC548;
+    // hex: &#x1F60E;
     .replace(/&#x([0-9A-Fa-f]+);/g, (_, hex) =>
-      String.fromCharCode(parseInt(hex, 16))
+      String.fromCodePoint(parseInt(hex, 16))
     )
-    // dec: &#45208;
+    // dec: &#128526;
     .replace(/&#([0-9]+);/g, (_, dec) =>
-      String.fromCharCode(parseInt(dec, 10))
+      String.fromCodePoint(parseInt(dec, 10))
     )
     // 기본 HTML 엔티티
     .replace(/&quot;/g, '"')
@@ -310,6 +316,56 @@ function saveData(domHtml) {
   }
 }
 
+// ✅ 2. 데이터 삽입 함수
+async function insertInstagramData(url, title, author, tags,outputUrl ) {
 
+  console.log("url:", url);
+  console.log("title:", title);
+  console.log("author:", author);
+  console.log("tags:", tags);
+  console.log("outputUrl:", outputUrl);
+
+  const sql = `
+    INSERT INTO instagram_thumbnail 
+    (instagram_url, title, author, tags, output_url)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      title = VALUES(title),
+      author = VALUES(author),
+      tags = VALUES(tags),
+      output_url = VALUES(output_url)
+  `;
+
+  try {
+    const [result] = await pool.execute(sql, [url, title, author, tags, ip, outputUrl]);
+    console.log("✅ 저장 성공:", result);
+  } catch (err) {
+    console.error("❌ 저장 실패:", err);
+  }
+}
+
+async function getOutputUrlIfExists(instagramUrl) {
+  const sql = `
+    SELECT output_url
+    FROM instagram_thumbnail
+    WHERE instagram_url = ?
+    LIMIT 1
+  `;
+
+  try {
+    const [rows] = await pool.execute(sql, [instagramUrl]);
+
+    if (rows.length > 0) {
+      console.log("✅ 기존 URL 존재:", rows[0].output_url);
+      return rows[0].output_url;
+    } else {
+      console.log("❌ 해당 URL 없음:", instagramUrl);
+      return null;
+    }
+  } catch (err) {
+    console.error("❌ DB 조회 실패:", err);
+    return null;
+  }
+}
 
 

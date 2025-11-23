@@ -61,7 +61,6 @@ const convertUrl = async () => {
     // 성공 → 부모에게 데이터 전달
     emit("converted", {
       previewUrl: res.previewUrl,
-      thumbnail: res.thumbnail
     })
   } catch (e) {
     console.error(e)

@@ -78,7 +78,7 @@
         </div>
 
         <div class="w-full md:w-auto">
-          <ResultBox :url="outputUrl" :thumbnail="thumbnailUrl" />
+          <ResultBox :url="outputUrl" />
         </div>
       </div>
     </section>
@@ -94,17 +94,14 @@ import ResultBox from "~/components/ResultBox.vue"
 const loading = ref(false)
 
 const outputUrl = ref("")
-const thumbnailUrl = ref("")
 
 const onConverted = (data) => {
   loading.value = false // 응답 도착 → 로딩 종료
 
   outputUrl.value = ""
-  thumbnailUrl.value = ""
 
   setTimeout(() => {
     outputUrl.value = data.previewUrl
-    thumbnailUrl.value = data.thumbnail
   }, 10)
 }
 </script>
